@@ -21,12 +21,11 @@ import retrofit2.Response;
 
 public class MovieApiClient {
 
-    // Live Data
-    private MutableLiveData<List<MovieModel>> mMovies;
+    private MutableLiveData<List<MovieModel>> mMovies;              // Live Data for search
+    private MutableLiveData<List<MovieModel>> mMoviesPopular;       // Live Data for popular
     private static MovieApiClient instance;
-
-    // Global runnable request
-    private RetrieveMoviesRunnable retrieveMoviesRunnable;
+    private RetrieveMoviesRunnable retrieveMoviesRunnable;          // Global runnable request for search
+    private RetrieveMoviesRunnablePopular retrieveMoviesRunnablePopular;   // Global runnable request for popular search
 
     public static MovieApiClient getInstance() {
         if (instance == null) {
@@ -37,12 +36,15 @@ public class MovieApiClient {
 
     private MovieApiClient() {
         mMovies = new MutableLiveData<>();
+        mMoviesPopular = new MutableLiveData<>();
     }
 
     public LiveData<List<MovieModel>> getMovies() {
         return mMovies;
     }
+    public LiveData<List<MovieModel>> getPopularMovies() { return mMoviesPopular; }
 
+    // These called through classes
     public void searchMoviesApi(String query, int pageNumber) {
 
         if (retrieveMoviesRunnable != null) {
@@ -57,6 +59,27 @@ public class MovieApiClient {
             public void run() {
                 // Cancelling Retrofit call
                 myHandler.cancel(true);
+            }
+        }, 5000, TimeUnit.MILLISECONDS);
+
+        // Retrieving data from RestAPI by runnable class
+
+    }
+
+    public void searchPopularMovies(int pageNumber) {
+
+        if (retrieveMoviesRunnablePopular != null) {
+            retrieveMoviesRunnablePopular = null;
+        }
+
+        retrieveMoviesRunnablePopular = new RetrieveMoviesRunnablePopular(pageNumber);
+
+        final Future myHandler2 = AppExecutors.getInstance().networkIO().submit(retrieveMoviesRunnablePopular);
+        AppExecutors.getInstance().networkIO().schedule(new Runnable() {
+            @Override
+            public void run() {
+                // Cancelling Retrofit call
+                myHandler2.cancel(true);
             }
         }, 5000, TimeUnit.MILLISECONDS);
 
@@ -113,6 +136,62 @@ public class MovieApiClient {
             return RequestService.getMovieApi().searchMovie(
                     Credentials.API_KEY,
                     query,
+                    pageNumber
+            );
+        }
+
+        private void cancelRequest() {
+            Log.d("TAG", "Cancelling search request.");
+            cancelRequest = true;
+        }
+    }
+
+    private class RetrieveMoviesRunnablePopular implements Runnable {
+
+        private int pageNumber;
+        boolean cancelRequest;
+
+        public RetrieveMoviesRunnablePopular(int pageNumber) {
+            this.pageNumber = pageNumber;
+            cancelRequest = false;
+        }
+
+        @Override
+        public void run() {
+            // Getting the response objects
+            try {
+                Response response2 = getPopular(pageNumber).execute();
+                if (cancelRequest) {
+                    return;
+                }
+                if (response2.code() == 200) {
+                    List<MovieModel> list = new ArrayList<>(((MovieSearchResponse)response2.body()).getMovies());
+                    if (pageNumber == 1) {
+
+                        // Sending data to live data
+                        // PostValue: used for background thread
+                        // SetValue: not for background thread
+                        mMoviesPopular.postValue(list);
+
+                    } else {
+                        List<MovieModel> currentMovies = mMovies.getValue();
+                        currentMovies.addAll(list);
+                        mMoviesPopular.postValue(currentMovies);
+                    }
+                } else {
+                    String error = response2.errorBody().string();
+                    Log.d("TAG", "ERROR: " + error);
+                    mMoviesPopular.postValue(null);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+                mMoviesPopular.postValue(null);
+            }
+        }
+
+        private Call<MovieSearchResponse> getPopular(int pageNumber) {
+            return RequestService.getMovieApi().getPopularMovies(
+                    Credentials.API_KEY,
                     pageNumber
             );
         }

@@ -33,10 +33,7 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class MovieListActivity extends AppCompatActivity implements OnMovieListener {
-
     // Add Network security config
-
-    private Button button;
 
     // Recycler View
     private RecyclerView recyclerView;
@@ -44,6 +41,8 @@ public class MovieListActivity extends AppCompatActivity implements OnMovieListe
 
     // ViewModel
     private MovieListViewModel movieListViewModel;
+
+    Boolean isPopular = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +62,22 @@ public class MovieListActivity extends AppCompatActivity implements OnMovieListe
 
         configureRecyclerView();
         observeChanges();
+        observePopularMovies();
 
+        // Get data for popular movies
+        movieListViewModel.searchPopularMovies(1);
+
+    }
+
+    private void observePopularMovies() {
+        movieListViewModel.getPopularMovies().observe(this, movieModels -> {
+            if (movieModels != null) {
+                for (MovieModel movieModel : movieModels) {
+                    movieAdapter.setmMovies(movieModels);
+                    movieAdapter.notifyDataSetChanged();
+                }
+            }
+        });
     }
 
     // Get data from searchView & query the api to get the results
@@ -84,6 +98,10 @@ public class MovieListActivity extends AppCompatActivity implements OnMovieListe
             public boolean onQueryTextChange(String newText) {
                 return false;
             }
+        });
+
+        searchView.setOnSearchClickListener(v -> {
+            isPopular = false;
         });
     }
 
@@ -107,7 +125,7 @@ public class MovieListActivity extends AppCompatActivity implements OnMovieListe
         movieAdapter = new MovieAdapter(this);
 
         recyclerView.setAdapter(movieAdapter);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 
         // RecyclerView Pagination
         // Loading next page of api response
